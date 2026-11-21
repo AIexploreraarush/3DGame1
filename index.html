@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Crystal Isle: Infinite Archipelago</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #061428;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        .font-game {
+            font-family: 'Fredoka', sans-serif;
+        }
+        .font-mono-code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+        .glass-panel {
+            background: rgba(9, 19, 36, 0.84);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.45);
+            border-radius: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 6px;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translate(-50%, 0) scale(0.85); }
+            45% { transform: translate(-50%, -34px) scale(1.12); }
+            100% { opacity: 0; transform: translate(-50%, -68px) scale(0.96); }
+        }
+        .floating-text {
+            position: absolute;
+            pointer-events: none;
+            font-family: 'Fredoka', sans-serif;
+            font-weight: 700;
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
+            animation: floatUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            z-index: 25;
+        }
+        @keyframes pulseBorderWarn {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 0.78; }
+        }
+        .border-warning-vignette {
+            box-shadow: inset 0 0 80px 26px rgba(239, 68, 68, 0.85);
+            animation: pulseBorderWarn 1.1s infinite;
+        }
+    </style>
+</head>
+<body class="relative w-full h-full overflow-hidden">
+
+    <!-- 3D WebGL Canvas -->
+    <div id="canvas-container" class="absolute inset-0 w-full h-full">
+        <canvas id="game-canvas"></canvas>
+    </div>
+
+    <!-- Minecraft World Border Red Vignette Warning -->
+    <div id="border-vignette" class="hidden fixed inset-0 pointer-events-none z-20 border-warning-vignette"></div>
+
+    <!-- Floating Coin & Hit Popups Layer -->
+    <div id="popup-layer" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+
+    <!-- TOP HUD BAR -->
+    <header class="absolute top-0 left-0 right-0 p-2.5 sm:p-3.5 flex flex-wrap items-start justify-between gap-2 pointer-events-none z-10">
+        <!-- Left HUD: Coins, Save Indicator, Tool, Boat & Coordinates -->
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <!-- Coins & Save Pill -->
+                <div class="glass-panel px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl flex items-center gap-2.5 shadow-lg">
+                    <div class="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shadow-inner border-2 border-amber-200 text-amber-950 font-game font-bold text-lg">
+                        $
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Coins</span>
+                            <span id="save-pill" class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold transition-colors">💾 Saved</span>
+                        </div>
+                        <div id="coin-display" class="text-white font-game text-lg sm:text-xl leading-none mt-0.5">0</div>
+                    </div>
+                </div>
+
+                <!-- Equipped Tool Pill -->
+                <div class="glass-panel px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl flex items-center gap-2 shadow-lg">
+                    <div id="hud-tool-icon" class="w-8 h-8 rounded-xl bg-slate-800 border border-sky-400/40 flex items-center justify-center text-lg">
+                        ⛏️
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1">
+                            <span id="hud-tool-tier" class="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">Tier 1</span>
+                            <span id="hud-tool-power" class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">1x</span>
+                        </div>
+                        <div id="hud-tool-name" class="text-white font-game text-xs sm:text-sm leading-tight mt-0.5 truncate max-w-[125px] sm:max-w-[165px]">Wooden Pickaxe</div>
+                    </div>
+                </div>
+
+                <!-- Equipped Boat Pill -->
+                <div class="hidden md:flex glass-panel px-3.5 py-2 rounded-2xl items-center gap-2 shadow-lg">
+                    <div id="hud-boat-icon" class="w-8 h-8 rounded-xl bg-slate-800 border border-cyan-400/40 flex items-center justify-center text-lg">
+                        🏊
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1">
+                            <span id="hud-boat-tier" class="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">Swimmer</span>
+                            <span id="hud-boat-speed" class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold">0.8x</span>
+                        </div>
+                        <div id="hud-boat-name" class="text-white font-game text-sm leading-tight mt-0.5">No Boat</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coordinates & World Border Telemetry -->
+            <div class="flex items-center gap-2">
+                <div class="glass-panel px-3 py-1.5 rounded-2xl shadow-lg border border-cyan-500/25 flex items-center gap-3">
+                    <div>
+                        <div id="biome-badge" class="text-[10px] uppercase tracking-wider text-cyan-300 font-bold">🏠 Crystal Home Isle</div>
+                        <div id="coord-display" class="text-white font-mono-code text-xs font-bold mt-0.5">X: 0 | Y: 1 | Z: 6</div>
+                    </div>
+                    <div class="h-6 w-px bg-white/10"></div>
+                    <div>
+                        <div class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">World Border</div>
+                        <div id="border-dist-display" class="text-amber-300 font-mono-code text-xs font-bold mt-0.5">1,494m</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right HUD: Actions & Circular Minimap Radar -->
+        <div class="flex flex-col items-end gap-2 pointer-events-auto">
+            <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                <!-- Meteor Event Pill -->
+                <div id="event-banner" class="hidden glass-panel px-3 py-2 rounded-2xl border border-rose-400/60 text-rose-200 font-game text-xs flex items-center gap-1.5 shadow-lg">
+                    <span class="animate-spin">☄️</span>
+                    <span id="event-text">Meteor Shower! 2x</span>
+                </div>
+
+                <!-- Mobile Touch Controls Toggle -->
+                <button id="btn-toggle-touch" title="Toggle Touch Controls" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition text-cyan-200 px-2.5 py-2 sm:px-3 rounded-2xl shadow-lg text-xs font-game flex items-center gap-1.5 border border-cyan-400/40">
+                    <span>📱</span>
+                    <span id="touch-toggle-label">Touch: ON</span>
+                </button>
+
+                <!-- Sound Toggle -->
+                <button id="btn-toggle-sound" title="Toggle Sound Effects" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition text-slate-200 p-2 sm:p-2.5 rounded-2xl shadow-lg text-sm">
+                    🔊
+                </button>
+
+                <!-- Settings / Controls / Reset Save -->
+                <button id="btn-open-settings" title="Controls & Save Data" class="glass-panel hover:bg-slate-800/90 active:scale-95 transition text-slate-200 p-2 sm:p-2.5 rounded-2xl shadow-lg text-sm">
+                    ⚙️
+                </button>
+
+                <!-- Boat Deploy Button -->
+                <button id="btn-board-boat" title="Toggle Boat (B / V)" class="glass-panel hover:bg-cyan-900/70 active:scale-95 transition text-cyan-200 px-3 py-2 sm:py-2.5 rounded-2xl shadow-lg flex items-center gap-1.5 border border-cyan-400/40 text-xs sm:text-sm font-game">
+                    <span>⛵</span>
+                    <span class="hidden sm:inline">Boat</span>
+                </button>
+
+                <!-- Shop Button -->
+                <button id="btn-toggle-shop" class="bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 active:scale-95 transition text-slate-950 font-game font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-lg shadow-orange-500/30 flex items-center gap-1.5 border border-amber-200 text-xs sm:text-sm">
+                    <span class="text-base">🛒</span>
+                    <span>Shop</span>
+                    <kbd class="hidden lg:inline-block text-[10px] bg-black/20 text-amber-950 px-1.5 py-0.5 rounded font-sans font-bold">T</kbd>
+                </button>
+            </div>
+
+            <!-- Circular Minimap Radar -->
+            <div class="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full glass-panel p-1 shadow-xl border-2 border-cyan-400/40 overflow-hidden">
+                <canvas id="radar-canvas" width="112" height="112" class="w-full h-full rounded-full block"></canvas>
+                <span class="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-bold text-cyan-200 pointer-events-none">N</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contextual Action Prompt -->
+    <div id="context-prompt" class="hidden absolute bottom-44 lg:bottom-16 left-1/2 -translate-x-1/2 glass-panel px-4 py-1.5 rounded-full text-white text-xs sm:text-sm font-semibold shadow-xl pointer-events-none z-10 flex items-center gap-2 border border-amber-400/40 whitespace-nowrap">
+        <span id="context-icon">💎</span>
+        <span id="context-text">Tap SWING or Click to Mine Crystal!</span>
+    </div>
+
+    <!-- Desktop Controls Hint Bar -->
+    <div class="hidden lg:flex absolute bottom-3 left-4 glass-panel px-4 py-2 rounded-2xl text-slate-300 text-xs items-center gap-3.5 pointer-events-none z-10">
+        <div><kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-white font-bold">WASD</kbd> Move</div>
+        <div><kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-white font-bold">Space</kbd> Jump</div>
+        <div><kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-white font-bold">Click / F</kbd> Swing</div>
+        <div><kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-white font-bold">B / V</kbd> Boat</div>
+        <div><kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-white font-bold">T</kbd> Shop</div>
+        <div><kbd class="px-1.5 py-0.5 bg-slate-800 rounded text-white font-bold">Right-Drag</kbd> Rotate Cam</div>
+    </div>
+
+    <!-- MOBILE & TABLET MULTI-TOUCH CONTROLS -->
+    <div id="mobile-controls" class="fixed bottom-4 left-4 right-4 flex items-end justify-between pointer-events-none z-20">
+        <!-- Virtual Analog Thumbstick -->
+        <div id="joystick-zone" class="w-32 h-32 sm:w-36 sm:h-36 rounded-full glass-panel relative pointer-events-auto flex items-center justify-center border-2 border-cyan-400/45 shadow-2xl touch-none">
+            <span class="absolute top-2 text-[10px] font-bold text-cyan-300/70 pointer-events-none">▲</span>
+            <span class="absolute bottom-2 text-[10px] font-bold text-cyan-300/70 pointer-events-none">▼</span>
+            <span class="absolute left-2.5 text-[10px] font-bold text-cyan-300/70 pointer-events-none">◀</span>
+            <span class="absolute right-2.5 text-[10px] font-bold text-cyan-300/70 pointer-events-none">▶</span>
+            <div id="joystick-nub" class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-cyan-400 to-white shadow-xl border-2 border-white pointer-events-none"></div>
+        </div>
+
+        <!-- Right Ergonomic Action Buttons -->
+        <div class="flex flex-col items-end gap-2.5 pointer-events-auto touch-none">
+            <div class="flex items-center gap-2">
+                <button id="btn-touch-shop" class="px-3.5 py-2.5 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 border-2 border-amber-200 text-slate-950 active:scale-90 transition flex flex-col items-center justify-center shadow-lg">
+                    <span class="text-lg leading-none">🛒</span>
+                    <span class="text-[9px] font-game font-bold mt-0.5">SHOP</span>
+                </button>
+                <button id="btn-touch-boat" class="px-3.5 py-2.5 rounded-2xl glass-panel border-2 border-cyan-400/60 text-cyan-200 active:scale-90 transition flex flex-col items-center justify-center shadow-lg">
+                    <span class="text-lg leading-none">⛵</span>
+                    <span class="text-[9px] font-game font-bold mt-0.5">BOAT</span>
+                </button>
+                <button id="btn-touch-jump" class="px-3.5 py-2.5 rounded-2xl glass-panel border-2 border-amber-400/60 text-amber-200 active:scale-90 transition flex flex-col items-center justify-center shadow-lg">
+                    <span class="text-lg leading-none">⬆️</span>
+                    <span class="text-[9px] font-game font-bold mt-0.5">JUMP</span>
+                </button>
+            </div>
+            <button id="btn-touch-swing" class="w-24 h-24 rounded-full bg-gradient-to-tr from-emerald-500 via-teal-400 to-cyan-300 active:scale-90 transition shadow-2xl shadow-emerald-500/50 border-4 border-white/85 flex flex-col items-center justify-center text-slate-950 font-game font-bold">
+                <span class="text-3xl leading-none">⛏️</span>
+                <span class="text-xs font-extrabold tracking-wide mt-0.5">SWING</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- INFINITE SHOP & UPGRADES MODAL -->
+    <div id="shop-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-30 flex items-center justify-center p-3 sm:p-4">
+        <div class="glass-panel w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border border-white/20 flex flex-col max-h-[88vh]">
+            <!-- Modal Header -->
+            <div class="p-4 sm:p-5 bg-slate-900/90 border-b border-white/10 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-2xl">
+                        🏪
+                    </div>
+                    <div>
+                        <h2 class="text-white font-game text-lg sm:text-2xl">Barnaby's Infinite Forge & Shop</h2>
+                        <p class="text-slate-400 text-xs">Infinite diamond tools, ocean boats, island expansions, pets & auras!</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-amber-400/30">
+                        <span class="text-amber-400 font-bold">$</span>
+                        <span id="shop-coin-display" class="text-white font-game text-base">0</span>
+                    </div>
+                    <button id="btn-close-shop" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-lg">✕</button>
+                </div>
+            </div>
+
+            <!-- Shop Navigation Tabs -->
+            <div class="flex flex-wrap gap-1.5 px-4 pt-3 pb-2 bg-slate-900/60 border-b border-white/10">
+                <button data-tab="tools" class="shop-tab px-3.5 py-2 rounded-xl font-game text-xs sm:text-sm bg-sky-400 text-slate-950 font-bold transition">⛏️ Infinite Tools</button>
+                <button data-tab="boats" class="shop-tab px-3.5 py-2 rounded-xl font-game text-xs sm:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 transition">⛵ Infinite Boats</button>
+                <button data-tab="upgrades" class="shop-tab px-3.5 py-2 rounded-xl font-game text-xs sm:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 transition">⚡ Upgrades & Island</button>
+                <button data-tab="pets" class="shop-tab px-3.5 py-2 rounded-xl font-game text-xs sm:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 transition">✨ Pets & Auras</button>
+            </div>
+
+            <!-- Shop Cards Grid -->
+            <div id="shop-items-container" class="p-4 sm:p-5 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-3.5 flex-1">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS, CONTROLS & SAVE DATA MODAL -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-40 flex items-center justify-center p-3 sm:p-4">
+        <div class="glass-panel w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-white/20 flex flex-col">
+            <div class="p-4 sm:p-5 bg-slate-900/90 border-b border-white/10 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">⚙️</span>
+                    <div>
+                        <h2 class="text-white font-game text-lg sm:text-xl">Game Settings & Save Data</h2>
+                        <p class="text-slate-400 text-xs">Progress auto-saves locally to your browser</p>
+                    </div>
+                </div>
+                <button id="btn-close-settings" class="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold">✕</button>
+            </div>
+
+            <div class="p-4 sm:p-5 flex flex-col gap-4 text-sm text-slate-200">
+                <div class="bg-slate-900/80 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-1.5 text-xs">
+                    <div class="flex justify-between"><span class="text-slate-400">Total Coins Earned:</span><span id="stat-total-coins" class="font-bold text-amber-300">0</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Highest Tool Tier:</span><span id="stat-tool-tier" class="font-bold text-sky-300">Tier 1</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Highest Boat Tier:</span><span id="stat-boat-tier" class="font-bold text-cyan-300">Tier 0</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">Home Island Level:</span><span id="stat-island-lvl" class="font-bold text-emerald-300">Level 1</span></div>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                    <button id="btn-manual-save" class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-game font-bold text-sm transition">
+                        💾 Save Progress Now
+                    </button>
+                    <button id="btn-reset-save" class="w-full py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 font-game font-bold text-sm transition">
+                        🗑️ Reset Save Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="toast-banner" class="hidden fixed top-20 left-1/2 -translate-x-1/2 glass-panel px-5 py-2.5 rounded-2xl border border-emerald-400/50 text-emerald-200 font-game text-xs sm:text-sm shadow-2xl z-50 pointer-events-none">
+        Progress Saved!
+    </div>
+
+    <!-- MAIN SINGLE-PLAYER 3D GAME ENGINE -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            // ==========================================
+            // 1. CONSTANTS & NUMBER FORMATTER
+            // ==========================================
+            const WORLD_BORDER_LIMIT = 1500;
+            const STORAGE_KEY = 'crystal_isle_save_v1';
+
+            function formatNum(n) {
+                if (n < 1000) return Math.floor(n).toLocaleString();
+                const suffixes = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+                const tier = Math.floor(Math.log10(n) / 3);
+                if (tier < suffixes.length) {
+                    const scaled = n / Math.pow(10, tier * 3);
+                    return scaled.toFixed(scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2) + suffixes[tier];
+                }
+                return n.toExponential(2);
+            }
+
+            // ==========================================
+            // 2. PROCEDURAL WEB AUDIO SOUND ENGINE
+            // ==========================================
+            class SoundFX {
+                constructor() {
+                    this.enabled = true;
+                    this.ctx = null;
+                }
+                init() {
+                    if (!this.ctx) {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        if (AudioCtx) this.ctx = new AudioCtx();
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume().catch(() => {});
+                    }
+                }
+                tone(freq, type = 'sine', dur = 0.14, vol = 0.12, endFreq = null) {
+                    if (!this.enabled) return;
+                    this.init();
+                    if (!this.ctx) return;
+                    try {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = type;
+                        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                        if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, this.ctx.currentTime + dur);
+                        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + dur);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start();
+                        osc.stop(this.ctx.currentTime + dur);
+                    } catch (e) {}
+                }
+                swing() { this.tone(240, 'triangle', 0.11, 0.1, 100); }
+                mine(combo = 1) {
+                    const p = Math.min(1300, 440 + combo * 35);
+                    this.tone(p, 'sine', 0.14, 0.14, p * 1.3);
+                }
+                shatter() {
+                    this.tone(720, 'triangle', 0.2, 0.18, 1280);
+                    setTimeout(() => this.tone(980, 'sine', 0.22, 0.15, 1600), 60);
+                }
+                buy() {
+                    this.tone(523.25, 'sine', 0.12, 0.16, 659.25);
+                    setTimeout(() => this.tone(783.99, 'triangle', 0.22, 0.18, 1046.5), 85);
+                }
+                jump() { this.tone(280, 'sine', 0.14, 0.1, 520); }
+                boat() { this.tone(145, 'sawtooth', 0.32, 0.1, 120); }
+            }
+            const sfx = new SoundFX();
+
+            // ==========================================
+            // 3. INFINITE PROCEDURAL TOOLS, BOATS & AURAS
+            // ==========================================
+            const TOOL_PREFIXES = [
+                "Wooden", "Stone", "Iron", "Golden", "Pure Diamond",
+                "Double-Beveled Diamond", "Royal Sapphire Diamond", "Starforged Astral",
+                "Void Prism", "Hyper-Diamond", "Quantum Crystal", "Celestial", "Infinity"
+            ];
+            const TOOL_SHAPES = [
+                { name: "Pickaxe", icon: "⛏️", shape: "pickaxe" },
+                { name: "Crystal Cleaver", icon: "🪓", shape: "axe" },
+                { name: "Diamond Hammer", icon: "🔨", shape: "hammer" },
+                { name: "Astral Blade", icon: "⚔️", shape: "blade" }
+            ];
+            const TOOL_PALETTES = [
+                { main: 0xd97706, gem: 0xfde68a, glow: 0x92400e },
+                { main: 0x94a3b8, gem: 0xe2e8f0, glow: 0x475569 },
+                { main: 0x64748b, gem: 0x38bdf8, glow: 0x334155 },
+                { main: 0xfbbf24, gem: 0xfef3c7, glow: 0xd97706 },
+                { main: 0x38bdf8, gem: 0xe0f2fe, glow: 0x0284c7 },
+                { main: 0x22d3ee, gem: 0xffffff, glow: 0x0891b2 },
+                { main: 0x34d399, gem: 0xd1fae5, glow: 0x059669 },
+                { main: 0xe879f9, gem: 0xfce7f3, glow: 0xc026d3 }
+            ];
+
+            function getToolData(tier) {
+                const t = Math.max(1, tier);
+                const prefix = TOOL_PREFIXES[(t - 1) % TOOL_PREFIXES.length];
+                const sObj = TOOL_SHAPES[(t - 1) % TOOL_SHAPES.length];
+                const palette = TOOL_PALETTES[Math.min(TOOL_PALETTES.length - 1, Math.floor((t - 1) / 1))];
+                const prestige = Math.floor((t - 1) / TOOL_PREFIXES.length);
+                const suffix = prestige > 0 ? ` [Prestige +${prestige}]` : "";
+                const cost = t === 1 ? 0 : Math.floor(25 * Math.pow(1.82, t - 2));
+                const multiplier = Math.floor(Math.pow(1.62, t - 1) * (1 + (t - 1) * 0.25));
+                const swingSpeed = Math.min(3.2, 1.0 + (t - 1) * 0.08);
+                const reach = Math.min(8.5, 3.8 + (t - 1) * 0.16);
+                const diamondCount = t >= 5 ? Math.min(12, t - 2) : 0;
+
+                return {
+                    tier: t,
+                    name: `${prefix} ${sObj.name}${suffix}`,
+                    icon: sObj.icon,
+                    shape: sObj.shape,
+                    cost,
+                    multiplier,
+                    swingSpeed,
+                    reach,
+                    palette,
+                    diamondCount
+                };
+            }
+
+            const BOAT_TIERS = [
+                { name: "Wooden Raft", icon: "🛶" },
+                { name: "Outrigger Canoe", icon: "🚣" },
+                { name: "Ironclad Sloop", icon: "⛵" },
+                { name: "Diamond Hydrofoil", icon: "🚤" },
+                { name: "Starlight Galleon", icon: "🛳️" },
+                { name: "Astral Cruiser", icon: "🛸" }
+            ];
+            const BOAT_PALETTES = [
+                { hull: 0x92400e, trim: 0xfbbf24, sail: 0xf8fafc },
+                { hull: 0x0284c7, trim: 0x38bdf8, sail: 0xe0f2fe },
+                { hull: 0x059669, trim: 0x34d399, sail: 0xd1fae5 },
+                { hull: 0x7c3aed, trim: 0xe879f9, sail: 0xfce7f3 }
+            ];
+
+            function getBoatData(tier) {
+                if (tier <= 0) {
+                    return { tier: 0, name: "No Boat (Swimmer)", icon: "🏊", cost: 0, speedMult: 0.78, coinBonus: 1.0, palette: BOAT_PALETTES[0] };
+                }
+                const base = BOAT_TIERS[(tier - 1) % BOAT_TIERS.length];
+                const cycle = Math.floor((tier - 1) / BOAT_TIERS.length);
+                const suffix = cycle > 0 ? ` Mk.${cycle + 1}` : "";
+                const palette = BOAT_PALETTES[(tier - 1) % BOAT_PALETTES.length];
+                const cost = Math.floor(70 * Math.pow(2.05, tier - 1));
+                const speedMult = Number((1.55 + (tier - 1) * 0.34).toFixed(2));
+                const coinBonus = Number((1 + tier * 0.25).toFixed(2));
+                return {
+                    tier,
+                    name: `${base.name}${suffix}`,
+                    icon: base.icon,
+                    cost,
+                    speedMult,
+                    coinBonus,
+                    palette
+                };
+            }
+
+            const AURAS = [
+                { id: 0, name: "None", color: null, bonus: 0, cost: 0, desc: "Standard explorer stance." },
+                { id: 1, name: "Emerald Breeze", color: 0x34d399, bonus: 0.4, cost: 180, desc: "Swirling emerald leaf energy (+40% Coins)." },
+                { id: 2, name: "Golden Sunfire", color: 0xfbbf24, bonus: 1.0, cost: 650, desc: "Radiant solar ring (+100% Coins)." },
+                { id: 3, name: "Diamond Frost", color: 0x38bdf8, bonus: 2.2, cost: 2400, desc: "Crystalline frost halo (+220% Coins)." },
+                { id: 4, name: "Cosmic Nebula", color: 0xe879f9, bonus: 4.5, cost: 9500, desc: "Astral void aura (+450% Coins)." }
+            ];
+
+            const DEFAULT_OUTFITS = [0x3b82f6, 0x10b981, 0xf59e0b, 0xec4899, 0x8b5cf6, 0x06b6d4];
+
+            // ==========================================
+            // 4. PLAYER STATE & LOCALSTORAGE SAVE SYSTEM
+            // ==========================================
+            const state = {
+                coins: 0,
+                totalCoinsEarned: 0,
+                toolTier: 1,
+                boatTier: 0,
+                islandSizeLevel: 1,
+                harvestPowerLevel: 1,
+                speedLevel: 1,
+                magnetRangeLevel: 1,
+                petCount: 0,
+                unlockedAuras: [0],
+                equippedAura: 0,
+                outfitColor: DEFAULT_OUTFITS[0],
+                x: 0,
+                z: 6,
+                camYaw: 0,
+
+                // Runtime state
+                isSailing: false,
+                y: 0.5,
+                vy: 0,
+                isGrounded: true,
+                rotY: 0,
+                isSwinging: false,
+                swingProgress: 0,
+                hitThisSwing: false,
+                walkCycle: 0,
+                combo: 0,
+                comboTimer: 0,
+                meteorActive: false,
+                meteorTimer: 0,
+                nextMeteorIn: 90,
+                isShopOpen: false,
+                isSettingsOpen: false,
+                activeShopTab: 'tools',
+                camPitch: 0.48,
+                camDist: 17,
+                isDraggingCam: false,
+                lastMouseX: 0,
+                lastMouseY: 0
+            };
+
+            function loadSaveData() {
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (!raw) return;
+                    const data = JSON.parse(raw);
+                    state.coins = Math.max(0, Number(data.coins) || 0);
+                    state.totalCoinsEarned = Math.max(state.coins, Number(data.totalCoinsEarned) || 0);
+                    state.toolTier = Math.max(1, Number(data.toolTier) || 1);
+                    state.boatTier = Math.max(0, Number(data.boatTier) || 0);
+                    state.islandSizeLevel = Math.max(1, Number(data.islandSizeLevel) || 1);
+                    state.harvestPowerLevel = Math.max(1, Number(data.harvestPowerLevel) || 1);
+                    state.speedLevel = Math.max(1, Number(data.speedLevel) || 1);
+                    state.magnetRangeLevel = Math.max(1, Number(data.magnetRangeLevel) || 1);
+                    state.petCount = Math.max(0, Math.min(12, Number(data.petCount) || 0));
+                    state.unlockedAuras = Array.isArray(data.unlockedAuras) && data.unlockedAuras.length ? data.unlockedAuras : [0];
+                    state.equippedAura = Number(data.equippedAura) || 0;
+                    state.outfitColor = Number(data.outfitColor) || DEFAULT_OUTFITS[0];
+                    state.x = Math.max(-WORLD_BORDER_LIMIT + 10, Math.min(WORLD_BORDER_LIMIT - 10, Number(data.x) || 0));
+                    state.z = Math.max(-WORLD_BORDER_LIMIT + 10, Math.min(WORLD_BORDER_LIMIT - 10, Number(data.z) || 6));
+                    state.camYaw = Number(data.camYaw) || 0;
+                } catch (e) {
+                    console.warn('Could not parse saved data:', e);
+                }
+            }
+
+            let savePillTimer = null;
+            function saveGameData(flashUI = false) {
+                try {
+                    const payload = {
+                        coins: Math.floor(state.coins),
+                        totalCoinsEarned: Math.floor(state.totalCoinsEarned),
+                        toolTier: state.toolTier,
+                        boatTier: state.boatTier,
+                        islandSizeLevel: state.islandSizeLevel,
+                        harvestPowerLevel: state.harvestPowerLevel,
+                        speedLevel: state.speedLevel,
+                        magnetRangeLevel: state.magnetRangeLevel,
+                        petCount: state.petCount,
+                        unlockedAuras: state.unlockedAuras,
+                        equippedAura: state.equippedAura,
+                        outfitColor: state.outfitColor,
+                        x: Math.round(state.x * 10) / 10,
+                        z: Math.round(state.z * 10) / 10,
+                        camYaw: Math.round(state.camYaw * 100) / 100
+                    };
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+
+                    if (flashUI) {
+                        const pill = document.getElementById('save-pill');
+                        if (pill) {
+                            pill.textContent = '💾 Saved!';
+                            pill.classList.add('bg-emerald-400', 'text-slate-950');
+                            pill.classList.remove('bg-emerald-500/20', 'text-emerald-300');
+                            clearTimeout(savePillTimer);
+                            savePillTimer = setTimeout(() => {
+                                pill.textContent = '💾 Saved';
+                                pill.classList.remove('bg-emerald-400', 'text-slate-950');
+                                pill.classList.add('bg-emerald-500/20', 'text-emerald-300');
+                            }, 750);
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            loadSaveData();
+            window.addEventListener('beforeunload', () => saveGameData(false));
+
+            // ==========================================
+            // 5. THREE.JS SCENE, LIGHTING, OCEAN & BORDER
+            // ==========================================
+            const canvas = document.getElementById('game-canvas');
+            const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x38bdf8);
+            scene.fog = new THREE.FogExp2(0x7dd3fc, 0.0042);
+
+            const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.5, 900);
+
+            const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x0369a1, 0.85);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+            dirLight.position.set(45, 75, 45);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 200;
+            const dShadow = 56;
+            dirLight.shadow.camera.left = -dShadow;
+            dirLight.shadow.camera.right = dShadow;
+            dirLight.shadow.camera.top = dShadow;
+            dirLight.shadow.camera.bottom = -dShadow;
+            scene.add(dirLight);
+            scene.add(dirLight.target);
+
+            // Infinite Ocean Plane
+            const oceanGeo = new THREE.PlaneGeometry(2400, 2400, 32, 32);
+            oceanGeo.rotateX(-Math.PI / 2);
+            const oceanMat = new THREE.MeshStandardMaterial({
+                color: 0x0284c7,
+                roughness: 0.24,
+                metalness: 0.14,
+                flatShading: true
+            });
+            const oceanMesh = new THREE.Mesh(oceanGeo, oceanMat);
+            oceanMesh.position.y = -0.65;
+            oceanMesh.receiveShadow = true;
+            scene.add(oceanMesh);
+
+            // Minecraft-Style Animated World Border at ±1,500 blocks
+            function createWorldBorderTexture() {
+                const c = document.createElement('canvas');
+                c.width = 128;
+                c.height = 128;
+                const ctx = c.getContext('2d');
+                ctx.strokeStyle = 'rgba(34, 211, 238, 0.88)';
+                ctx.lineWidth = 18;
+                for (let i = -128; i < 256; i += 36) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, 0);
+                    ctx.lineTo(i + 128, 128);
+                    ctx.stroke();
+                }
+                ctx.strokeStyle = 'rgba(165, 243, 252, 0.35)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(0, 0, 128, 128);
+                const tex = new THREE.CanvasTexture(c);
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.repeat.set(96, 14);
+                return tex;
+            }
+
+            const borderTex = createWorldBorderTexture();
+            const borderMat = new THREE.MeshBasicMaterial({
+                map: borderTex,
+                transparent: true,
+                opacity: 0.62,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const bSize = WORLD_BORDER_LIMIT * 2;
+            const bHeight = 220;
+            const wallGeo = new THREE.PlaneGeometry(bSize, bHeight);
+            [
+                [0, -WORLD_BORDER_LIMIT, 0],
+                [0, WORLD_BORDER_LIMIT, 0],
+                [WORLD_BORDER_LIMIT, 0, Math.PI / 2],
+                [-WORLD_BORDER_LIMIT, 0, Math.PI / 2]
+            ].forEach(([wx, wz, ry]) => {
+                const wall = new THREE.Mesh(wallGeo, borderMat);
+                wall.position.set(wx, bHeight / 2 - 10, wz);
+                wall.rotation.y = ry;
+                scene.add(wall);
+            });
+
+            // ==========================================
+            // 6. EXPANDING HOME ISLAND & INFINITE ARCHIPELAGO
+            // ==========================================
+            const homeIslandGroup = new THREE.Group();
+            scene.add(homeIslandGroup);
+
+            const resourceNodes = [];
+            const activeParticles = [];
+
+            function getHomeRadius() {
+                return 18 + state.islandSizeLevel * 6;
+            }
+
+            function createStylizedTree(type, leafColor) {
+                const g = new THREE.Group();
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.26, 0.42, 2.5, 7),
+                    new THREE.MeshStandardMaterial({ color: 0x78350f, flatShading: true })
+                );
+                trunk.position.y = 1.25;
+                trunk.castShadow = true;
+                g.add(trunk);
+
+                if (type === 'crystal') {
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: leafColor,
+                        emissive: leafColor,
+                        emissiveIntensity: 0.35,
+                        flatShading: true
+                    });
+                    const spire = new THREE.Mesh(new THREE.OctahedronGeometry(1.4, 0), mat);
+                    spire.position.y = 3.1;
+                    spire.scale.set(0.85, 1.5, 0.85);
+                    spire.castShadow = true;
+                    g.add(spire);
+                } else {
+                    const mat = new THREE.MeshStandardMaterial({ color: leafColor, flatShading: true });
+                    for (let l = 0; l < 3; l++) {
+                        const cone = new THREE.Mesh(new THREE.ConeGeometry(1.8 - l * 0.4, 2.0, 7), mat);
+                        cone.position.y = 2.5 + l * 1.1;
+                        cone.castShadow = true;
+                        g.add(cone);
+                    }
+                }
+                return g;
+            }
+
+            function createHumanoid(shirtColor, pantsColor = 0x1e293b, skinColor = 0xfde68a) {
+                const group = new THREE.Group();
+                const torso = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.92, 1.12, 0.52),
+                    new THREE.MeshStandardMaterial({ color: shirtColor, flatShading: true })
+                );
+                torso.position.y = 1.32;
+                torso.castShadow = true;
+                group.add(torso);
+
+                const head = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.8, 0.8, 0.8),
+                    new THREE.MeshStandardMaterial({ color: skinColor, flatShading: true })
+                );
+                head.position.y = 2.34;
+                head.castShadow = true;
+                group.add(head);
+
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+                const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.08), eyeMat);
+                eyeL.position.set(-0.2, 2.38, 0.4);
+                const eyeR = eyeL.clone();
+                eyeR.position.x = 0.2;
+                group.add(eyeL, eyeR);
+
+                const legGeo = new THREE.BoxGeometry(0.35, 0.78, 0.4);
+                const legMat = new THREE.MeshStandardMaterial({ color: pantsColor, flatShading: true });
+                const leftLeg = new THREE.Mesh(legGeo, legMat);
+                leftLeg.position.set(-0.23, 0.39, 0);
+                leftLeg.castShadow = true;
+                const rightLeg = new THREE.Mesh(legGeo, legMat);
+                rightLeg.position.set(0.23, 0.39, 0);
+                rightLeg.castShadow = true;
+                group.add(leftLeg, rightLeg);
+
+                const armGeo = new THREE.BoxGeometry(0.3, 0.92, 0.34);
+                const armMat = new THREE.MeshStandardMaterial({ color: shirtColor, flatShading: true });
+                const leftArm = new THREE.Mesh(armGeo, armMat);
+                leftArm.position.set(-0.66, 1.38, 0);
+                leftArm.castShadow = true;
+
+                const rightArmPivot = new THREE.Group();
+                rightArmPivot.position.set(0.66, 1.72, 0);
+                const rightArm = new THREE.Mesh(armGeo, armMat);
+                rightArm.position.set(0, -0.34, 0);
+                rightArm.castShadow = true;
+                rightArmPivot.add(rightArm);
+
+                group.add(leftArm, rightArmPivot);
+                group.userData = { torso, head, leftLeg, rightLeg, leftArm, rightArmPivot };
+                return group;
+            }
+
+            function createFloatingSign(title, subtitle) {
+                const c = document.createElement('canvas');
+                c.width = 256;
+                c.height = 72;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.beginPath();
+                ctx.roundRect(12, 8, 232, 56, 16);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 21px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(title, 128, 34);
+
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = 'bold 15px Inter, sans-serif';
+                ctx.fillText(subtitle, 128, 55);
+
+                const tex = new THREE.CanvasTexture(c);
+                const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+                const sprite = new THREE.Sprite(mat);
+                sprite.scale.set(3.5, 0.98, 1);
+                sprite.position.y = 3.35;
+                return sprite;
+            }
+
+            function buildHomeIsland() {
+                while (homeIslandGroup.children.length > 0) {
+                    homeIslandGroup.remove(homeIslandGroup.children[0]);
+                }
+                const r = getHomeRadius();
+
+                const beach = new THREE.Mesh(
+                    new THREE.CylinderGeometry(r, r + 4.2, 1.4, 32),
+                    new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.85, flatShading: true })
+                );
+                beach.position.y = -0.5;
+                beach.receiveShadow = true;
+                homeIslandGroup.add(beach);
+
+                const grass = new THREE.Mesh(
+                    new THREE.CylinderGeometry(r * 0.86, r * 0.92, 0.7, 32),
+                    new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.78, flatShading: true })
+                );
+                grass.position.y = 0.15;
+                grass.receiveShadow = true;
+                homeIslandGroup.add(grass);
+
+                const plaza = new THREE.Mesh(
+                    new THREE.CylinderGeometry(7.2, 7.8, 0.25, 24),
+                    new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9, flatShading: true })
+                );
+                plaza.position.y = 0.45;
+                plaza.receiveShadow = true;
+                homeIslandGroup.add(plaza);
+
+                // Merchant Barnaby's Shop Stall
+                const stall = new THREE.Group();
+                stall.position.set(-5.5, 0.55, -5.5);
+                stall.rotation.y = Math.PI / 4;
+                const counter = new THREE.Mesh(
+                    new THREE.BoxGeometry(3.6, 1.15, 1.7),
+                    new THREE.MeshStandardMaterial({ color: 0xb45309 })
+                );
+                counter.position.y = 0.58;
+                counter.castShadow = true;
+                stall.add(counter);
+
+                for (let s = -2; s <= 2; s++) {
+                    const stripe = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.78, 0.16, 2.2),
+                        new THREE.MeshStandardMaterial({ color: s % 2 === 0 ? 0xef4444 : 0xf8fafc })
+                    );
+                    stripe.position.set(s * 0.76, 2.45, 0.1);
+                    stripe.rotation.x = 0.16;
+                    stall.add(stripe);
+                }
+                const merchant = createHumanoid(0xf59e0b, 0x78350f);
+                merchant.position.set(0, 0, -1.2);
+                merchant.add(createFloatingSign('Merchant Barnaby', 'Infinite Forge [T]'));
+                stall.add(merchant);
+                homeIslandGroup.add(stall);
+
+                // Decorative Trees
+                const treeCount = 8 + state.islandSizeLevel * 3;
+                for (let i = 0; i < treeCount; i++) {
+                    const ang = (i / treeCount) * Math.PI * 2 + 0.25;
+                    const dist = r * (0.65 + (i % 2) * 0.09);
+                    const tx = Math.cos(ang) * dist;
+                    const tz = Math.sin(ang) * dist;
+                    if (Math.hypot(tx + 5.5, tz + 5.5) < 5.2) continue;
+                    const tree = createStylizedTree(i % 2 === 0 ? 'pine' : 'crystal', i % 2 === 0 ? 0x15803d : 0x38bdf8);
+                    tree.position.set(tx, 0.45, tz);
+                    homeIslandGroup.add(tree);
+                }
+            }
+
+            // Deterministic Procedural Ocean Archipelago
+            const BIOMES = [
+                { name: 'Crystal Atoll', icon: '💎', sand: 0xe0f2fe, grass: 0x38bdf8, tree: 0x0284c7, tType: 'crystal', crystal: 0x22d3ee, mult: 2.6 },
+                { name: 'Golden Dunes', icon: '👑', sand: 0xfef08a, grass: 0xf59e0b, tree: 0xd97706, tType: 'pine', crystal: 0xfde047, mult: 3.8 },
+                { name: 'Emerald Grove', icon: '🌿', sand: 0xfde68a, grass: 0x10b981, tree: 0x059669, tType: 'pine', crystal: 0x34d399, mult: 5.0 },
+                { name: 'Obsidian Peak', icon: '🌋', sand: 0x334155, grass: 0x1e293b, tree: 0xf97316, tType: 'crystal', crystal: 0xf43f5e, mult: 6.8 },
+                { name: 'Cosmic Spire', icon: '🌌', sand: 0xf1f5f9, grass: 0x6366f1, tree: 0xa855f7, tType: 'crystal', crystal: 0xe879f9, mult: 9.2 }
+            ];
+
+            const activeIslands = new Map();
+            const SECTOR_SIZE = 125;
+
+            function seededHash(x, z) {
+                const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453123;
+                return h - Math.floor(h);
+            }
+
+            function updateArchipelago() {
+                const pgx = Math.round(state.x / SECTOR_SIZE);
+                const pgz = Math.round(state.z / SECTOR_SIZE);
+                const needed = new Set();
+
+                for (let dx = -2; dx <= 2; dx++) {
+                    for (let dz = -2; dz <= 2; dz++) {
+                        const gx = pgx + dx;
+                        const gz = pgz + dz;
+                        if (gx === 0 && gz === 0) continue;
+                        const key = `${gx},${gz}`;
+                        const r = seededHash(gx, gz);
+                        if (r > 0.34) {
+                            needed.add(key);
+                            if (!activeIslands.has(key)) {
+                                spawnBiomeIsland(gx, gz, key, r);
+                            }
+                        }
+                    }
+                }
+
+                for (const [key, isl] of activeIslands.entries()) {
+                    if (!needed.has(key)) {
+                        scene.remove(isl.group);
+                        for (let i = resourceNodes.length - 1; i >= 0; i--) {
+                            if (resourceNodes[i].islandKey === key) {
+                                scene.remove(resourceNodes[i].mesh);
+                                resourceNodes.splice(i, 1);
+                            }
+                        }
+                        activeIslands.delete(key);
+                    }
+                }
+            }
+
+            function spawnBiomeIsland(gx, gz, key, rand) {
+                const wx = gx * SECTOR_SIZE + (seededHash(gx + 9, gz - 4) - 0.5) * 46;
+                const wz = gz * SECTOR_SIZE + (seededHash(gx - 13, gz + 17) - 0.5) * 46;
+                if (Math.abs(wx) > WORLD_BORDER_LIMIT - 35 || Math.abs(wz) > WORLD_BORDER_LIMIT - 35) return;
+
+                const biome = BIOMES[Math.floor(seededHash(gx * 3, gz * 7) * BIOMES.length)];
+                const radius = 16 + seededHash(gx + 1, gz + 5) * 12;
+                const group = new THREE.Group();
+                group.position.set(wx, 0, wz);
+
+                const beach = new THREE.Mesh(
+                    new THREE.CylinderGeometry(radius, radius + 3.2, 1.3, 22),
+                    new THREE.MeshStandardMaterial({ color: biome.sand, flatShading: true })
+                );
+                beach.position.y = -0.5;
+                beach.receiveShadow = true;
+                group.add(beach);
+
+                const top = new THREE.Mesh(
+                    new THREE.CylinderGeometry(radius * 0.85, radius * 0.9, 0.7, 22),
+                    new THREE.MeshStandardMaterial({ color: biome.grass, flatShading: true })
+                );
+                top.position.y = 0.15;
+                top.receiveShadow = true;
+                group.add(top);
+
+                const beacon = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.3, 0.3, 24, 8),
+                    new THREE.MeshBasicMaterial({ color: biome.crystal, transparent: true, opacity: 0.25 })
+                );
+                beacon.position.y = 12;
+                group.add(beacon);
+
+                for (let t = 0; t < 5; t++) {
+                    const a = (t / 5) * Math.PI * 2 + rand;
+                    const tree = createStylizedTree(biome.tType, biome.tree);
+                    tree.position.set(Math.cos(a) * radius * 0.62, 0.45, Math.sin(a) * radius * 0.62);
+                    group.add(tree);
+                }
+
+                scene.add(group);
+
+                const distScale = 1 + (Math.hypot(wx, wz) / 135) * biome.mult;
+                for (let n = 0; n < 6; n++) {
+                    const a = (n / 6) * Math.PI * 2 + 0.3;
+                    const nr = radius * (0.25 + seededHash(n + gx, gz) * 0.42);
+                    createCrystalNode(wx + Math.cos(a) * nr, wz + Math.sin(a) * nr, biome.crystal, distScale, key);
+                }
+
+                activeIslands.set(key, { gx, gz, x: wx, z: wz, radius, biome, group });
+            }
+
+            // ==========================================
+            // 7. CRYSTAL NODES & HOME ISLAND SPAWNER
+            // ==========================================
+            function createCrystalNode(x, z, colorHex, valueMult = 1, islandKey = 'home') {
+                const g = new THREE.Group();
+                g.position.set(x, 0.5, z);
+
+                const rock = new THREE.Mesh(
+                    new THREE.DodecahedronGeometry(1.1, 0),
+                    new THREE.MeshStandardMaterial({ color: 0x475569, flatShading: true })
+                );
+                rock.scale.set(1.2, 0.52, 1.2);
+                rock.castShadow = true;
+                g.add(rock);
+
+                const mat = new THREE.MeshStandardMaterial({
+                    color: colorHex,
+                    emissive: colorHex,
+                    emissiveIntensity: 0.32,
+                    roughness: 0.15,
+                    flatShading: true
+                });
+
+                const main = new THREE.Mesh(new THREE.OctahedronGeometry(0.92, 0), mat);
+                main.position.y = 1.1;
+                main.scale.set(0.8, 1.5, 0.8);
+                main.castShadow = true;
+                g.add(main);
+
+                for (let s = 0; s < 2; s++) {
+                    const sub = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), mat);
+                    sub.position.set(s === 0 ? -0.55 : 0.55, 0.75, s === 0 ? 0.32 : -0.32);
+                    sub.rotation.z = s === 0 ? 0.35 : -0.35;
+                    sub.scale.set(0.75, 1.3, 0.75);
+                    g.add(sub);
+                }
+
+                scene.add(g);
+                const maxHp = Math.max(3, Math.round(3 + Math.log2(valueMult + 1) * 1.3));
+                const value = Math.max(6, Math.round(9 * valueMult));
+
+                const node = { mesh: g, x, z, color: colorHex, hp: maxHp, maxHp, value, respawnTimer: 0, shakeTimer: 0, islandKey };
+                resourceNodes.push(node);
+                return node;
+            }
+
+            function populateHomeNodes() {
+                for (let i = resourceNodes.length - 1; i >= 0; i--) {
+                    if (resourceNodes[i].islandKey === 'home') {
+                        scene.remove(resourceNodes[i].mesh);
+                        resourceNodes.splice(i, 1);
+                    }
+                }
+                const r = getHomeRadius();
+                const colors = [0x38bdf8, 0x34d399, 0xfbbf24, 0xf472b6, 0xa855f7];
+                const count = 12 + state.islandSizeLevel * 4;
+                for (let i = 0; i < count; i++) {
+                    const a = (i / count) * Math.PI * 2 + 0.18;
+                    const d = r * (0.34 + (i % 4) * 0.12);
+                    const nx = Math.cos(a) * d;
+                    const nz = Math.sin(a) * d;
+                    if (Math.hypot(nx + 5.5, nz + 5.5) < 5.2) continue;
+                    const tier = (i % 4) + state.islandSizeLevel;
+                    createCrystalNode(nx, nz, colors[(tier - 1) % colors.length], Math.pow(1.42, tier - 1), 'home');
+                }
+            }
+
+            // ==========================================
+            // 8. PLAYER CHARACTER, 3D TOOLS, BOATS, PETS & AURAS
+            // ==========================================
+            const playerRoot = new THREE.Group();
+            const playerChar = createHumanoid(state.outfitColor, 0x1e293b);
+            playerRoot.add(playerChar);
+            scene.add(playerRoot);
+
+            // Aura Ring
+            const auraGeo = new THREE.RingGeometry(0.95, 1.52, 32);
+            auraGeo.rotateX(-Math.PI / 2);
+            const auraMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0, side: THREE.DoubleSide });
+            const auraMesh = new THREE.Mesh(auraGeo, auraMat);
+            auraMesh.position.y = 0.08;
+            playerRoot.add(auraMesh);
+
+            function refreshAuraAndOutfit() {
+                playerChar.userData.torso.material.color.setHex(state.outfitColor);
+                playerChar.userData.leftArm.material.color.setHex(state.outfitColor);
+                playerChar.userData.rightArmPivot.children[0].material.color.setHex(state.outfitColor);
+
+                const aura = AURAS.find(a => a.id === state.equippedAura) || AURAS[0];
+                if (aura.color) {
+                    auraMat.color.setHex(aura.color);
+                    auraMat.opacity = 0.8;
+                } else {
+                    auraMat.opacity = 0;
+                }
+            }
+
+            // 3D Equipped Tool
+            let equippedToolMesh = null;
+            const orbitingToolGems = [];
+
+            function rebuildPlayerTool3D() {
+                const pivot = playerChar.userData.rightArmPivot;
+                if (equippedToolMesh) pivot.remove(equippedToolMesh);
+                orbitingToolGems.length = 0;
+
+                const tool = getToolData(state.toolTier);
+                const g = new THREE.Group();
+                g.position.set(0, -0.72, 0.34);
+                g.rotation.x = Math.PI / 3;
+
+                const handle = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.08, 0.1, 1.7, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x78350f })
+                );
+                handle.position.y = 0.55;
+                g.add(handle);
+
+                const headMat = new THREE.MeshStandardMaterial({
+                    color: tool.palette.main,
+                    emissive: tool.palette.glow,
+                    emissiveIntensity: 0.42,
+                    roughness: 0.15,
+                    flatShading: true
+                });
+                const gemMat = new THREE.MeshStandardMaterial({
+                    color: tool.palette.gem,
+                    emissive: tool.palette.main,
+                    emissiveIntensity: 0.7,
+                    flatShading: true
+                });
+
+                if (tool.shape === 'pickaxe') {
+                    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.24, 0.24), headMat);
+                    bar.position.y = 1.3;
+                    g.add(bar);
+                    [-0.8, 0.8].forEach(px => {
+                        const tip = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), gemMat);
+                        tip.position.set(px, 1.3, 0);
+                        g.add(tip);
+                    });
+                } else if (tool.shape === 'axe') {
+                    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.7, 0.18), headMat);
+                    blade.position.set(0.32, 1.25, 0);
+                    g.add(blade);
+                } else if (tool.shape === 'hammer') {
+                    const block = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.56, 0.56), headMat);
+                    block.position.y = 1.3;
+                    g.add(block);
+                } else {
+                    const crossguard = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.16, 0.26), gemMat);
+                    crossguard.position.y = 0.95;
+                    const blade = new THREE.Mesh(new THREE.OctahedronGeometry(0.52, 0), headMat);
+                    blade.scale.set(0.65, 2.1, 0.35);
+                    blade.position.y = 1.55;
+                    g.add(crossguard, blade);
+                }
+
+                for (let d = 0; d < tool.diamondCount; d++) {
+                    const mini = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), gemMat);
+                    const ang = (d / tool.diamondCount) * Math.PI * 2;
+                    mini.position.set(Math.cos(ang) * 0.48, 1.3, Math.sin(ang) * 0.48);
+                    g.add(mini);
+                    orbitingToolGems.push({ mesh: mini, baseAng: ang });
+                }
+
+                pivot.add(g);
+                equippedToolMesh = g;
+            }
+
+            // 3D Equipped Boat
+            let equippedBoatMesh = null;
+            function rebuildPlayerBoat3D() {
+                if (equippedBoatMesh) {
+                    playerRoot.remove(equippedBoatMesh);
+                    equippedBoatMesh = null;
+                }
+                if (state.boatTier <= 0) return;
+
+                const boat = getBoatData(state.boatTier);
+                const g = new THREE.Group();
+                g.position.set(0, -0.35, 0);
+
+                const hullMat = new THREE.MeshStandardMaterial({ color: boat.palette.hull, flatShading: true });
+                const trimMat = new THREE.MeshStandardMaterial({
+                    color: boat.palette.trim,
+                    emissive: boat.palette.trim,
+                    emissiveIntensity: 0.35
+                });
+
+                const hull = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.72, 4.2), hullMat);
+                hull.position.y = 0.24;
+                g.add(hull);
+
+                const bow = new THREE.Mesh(new THREE.ConeGeometry(1.55, 1.7, 4), hullMat);
+                bow.rotation.x = Math.PI / 2;
+                bow.rotation.y = Math.PI / 4;
+                bow.position.set(0, 0.24, 2.9);
+                g.add(bow);
+
+                [-1.08, 1.08].forEach(rx => {
+                    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 4.2), trimMat);
+                    rail.position.set(rx, 0.65, 0);
+                    g.add(rail);
+                });
+
+                if (boat.tier >= 2) {
+                    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 3.6, 8), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+                    mast.position.set(0, 2.1, 0.35);
+                    const sail = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.1, 0.1), new THREE.MeshStandardMaterial({ color: boat.palette.sail }));
+                    sail.position.set(0, 2.4, 0.4);
+                    g.add(mast, sail);
+                }
+
+                g.visible = state.isSailing;
+                playerRoot.add(g);
+                equippedBoatMesh = g;
+            }
+
+            // Orbiting 3D Companion Pets (up to 12)
+            const petMeshes = [];
+            function syncPets3D() {
+                while (petMeshes.length < state.petCount) {
+                    const idx = petMeshes.length;
+                    const colors = [0x38bdf8, 0x34d399, 0xfbbf24, 0xf472b6, 0xa855f7, 0x22d3ee];
+                    const col = colors[idx % colors.length];
+                    const g = new THREE.Group();
+                    const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.55, flatShading: true });
+                    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), mat);
+                    g.add(core);
+                    scene.add(g);
+                    petMeshes.push({ group: g, idx });
+                }
+            }
+
+            // ==========================================
+            // 9. HARVESTING, PARTICLES & SHOP SYSTEM
+            // ==========================================
+            function spawnBurst(x, y, z, colorHex, count = 7) {
+                const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+                const geo = new THREE.OctahedronGeometry(0.2, 0);
+                for (let i = 0; i < count; i++) {
+                    const m = new THREE.Mesh(geo, mat);
+                    m.position.set(x, y, z);
+                    scene.add(m);
+                    const ang = Math.random() * Math.PI * 2;
+                    const spd = 2.5 + Math.random() * 4.5;
+                    activeParticles.push({
+                        mesh: m,
+                        vx: Math.cos(ang) * spd,
+                        vy: 3.8 + Math.random() * 4.5,
+                        vz: Math.sin(ang) * spd,
+                        life: 0.6 + Math.random() * 0.25
+                    });
+                }
+            }
+
+            function spawnFloatingPopup(worldPos, text, colorClass = 'text-amber-300') {
+                const vec = worldPos.clone();
+                vec.y += 2.1;
+                vec.project(camera);
+                if (vec.z > 1) return;
+                const sx = (vec.x * 0.5 + 0.5) * window.innerWidth;
+                const sy = (-vec.y * 0.5 + 0.5) * window.innerHeight;
+
+                const el = document.createElement('div');
+                el.className = `floating-text text-sm sm:text-lg ${colorClass}`;
+                el.style.left = `${sx}px`;
+                el.style.top = `${sy}px`;
+                el.textContent = text;
+                document.getElementById('popup-layer').appendChild(el);
+                setTimeout(() => el.remove(), 1000);
+            }
+
+            function showToast(msg) {
+                const t = document.getElementById('toast-banner');
+                t.textContent = msg;
+                t.classList.remove('hidden');
+                clearTimeout(t._timer);
+                t._timer = setTimeout(() => t.classList.add('hidden'), 2400);
+            }
+
+            function getTotalMultiplier() {
+                const tool = getToolData(state.toolTier);
+                const boat = getBoatData(state.boatTier);
+                const harvestMult = 1 + (state.harvestPowerLevel - 1) * 0.35;
+                const petMult = 1 + state.petCount * 0.35;
+                const aura = AURAS.find(a => a.id === state.equippedAura) || AURAS[0];
+                const auraMult = 1 + aura.bonus;
+                const comboMult = 1 + Math.min(3.5, state.combo * 0.1);
+                const meteorMult = state.meteorActive ? 2.0 : 1.0;
+                return tool.multiplier * boat.coinBonus * harvestMult * petMult * auraMult * comboMult * meteorMult;
+            }
+
+            function triggerSwing() {
+                if (state.isSwinging || state.isShopOpen || state.isSettingsOpen) return;
+                state.isSwinging = true;
+                state.swingProgress = 0;
+                state.hitThisSwing = false;
+                sfx.swing();
+            }
+
+            function evaluateSwingHit() {
+                const tool = getToolData(state.toolTier);
+                const reach = tool.reach + (state.magnetRangeLevel - 1) * 0.7;
+                let hit = false;
+
+                for (let i = resourceNodes.length - 1; i >= 0; i--) {
+                    const node = resourceNodes[i];
+                    if (node.respawnTimer > 0) continue;
+                    if (Math.hypot(node.x - state.x, node.z - state.z) <= reach) {
+                        hit = true;
+                        node.hp -= 1;
+                        node.shakeTimer = 0.24;
+                        state.combo += 1;
+                        state.comboTimer = 4.2;
+
+                        const earned = Math.max(1, Math.round(node.value * getTotalMultiplier()));
+                        state.coins += earned;
+                        state.totalCoinsEarned += earned;
+                        spawnBurst(node.x, 1.3, node.z, node.color, 6);
+                        spawnFloatingPopup(new THREE.Vector3(node.x, 1.2, node.z), `+$${formatNum(earned)}`, 'text-amber-300');
+
+                        if (node.hp <= 0) {
+                            sfx.shatter();
+                            const shatterBonus = earned * 2;
+                            state.coins += shatterBonus;
+                            state.totalCoinsEarned += shatterBonus;
+                            spawnBurst(node.x, 1.5, node.z, 0xffffff, 12);
+                            spawnFloatingPopup(new THREE.Vector3(node.x, 1.9, node.z), `SHATTER! +$${formatNum(shatterBonus)}`, 'text-cyan-300');
+                            if (node.islandKey === 'meteor') {
+                                scene.remove(node.mesh);
+                                resourceNodes.splice(i, 1);
+                            } else {
+                                node.mesh.visible = false;
+                                node.respawnTimer = 4.0;
+                            }
+                        } else {
+                            sfx.mine(state.combo);
+                        }
+                    }
+                }
+
+                if (hit) {
+                    updateHUD();
+                }
+            }
+
+            function isLandAt(x, z) {
+                if (Math.hypot(x, z) <= getHomeRadius() + 1.2) return true;
+                for (const isl of activeIslands.values()) {
+                    if (Math.hypot(x - isl.x, z - isl.z) <= isl.radius + 1.0) return true;
+                }
+                return false;
+            }
+
+            function toggleBoat() {
+                if (state.boatTier <= 0) {
+                    showToast("⛵ Buy a Boat in the Shop first!");
+                    state.activeShopTab = 'boats';
+                    openShop();
+                    return;
+                }
+                state.isSailing = !state.isSailing;
+                if (equippedBoatMesh) equippedBoatMesh.visible = state.isSailing;
+                sfx.boat();
+                updateHUD();
+            }
+
+            // ==========================================
+            // 10. SHOP & SETTINGS UI RENDERERS
+            // ==========================================
+            function openShop() {
+                state.isShopOpen = true;
+                state.isSettingsOpen = false;
+                document.getElementById('settings-modal').classList.add('hidden');
+                document.getElementById('shop-modal').classList.remove('hidden');
+                renderShop();
+            }
+            function closeShop() {
+                state.isShopOpen = false;
+                document.getElementById('shop-modal').classList.add('hidden');
+            }
+
+            function openSettings() {
+                state.isSettingsOpen = true;
+                state.isShopOpen = false;
+                document.getElementById('shop-modal').classList.add('hidden');
+                document.getElementById('stat-total-coins').textContent = `$${formatNum(state.totalCoinsEarned)}`;
+                document.getElementById('stat-tool-tier').textContent = `Tier ${state.toolTier} (${getToolData(state.toolTier).name})`;
+                document.getElementById('stat-boat-tier').textContent = `Tier ${state.boatTier} (${getBoatData(state.boatTier).name})`;
+                document.getElementById('stat-island-lvl').textContent = `Level ${state.islandSizeLevel} (${getHomeRadius()}m radius)`;
+                document.getElementById('settings-modal').classList.remove('hidden');
+            }
+            function closeSettings() {
+                state.isSettingsOpen = false;
+                document.getElementById('settings-modal').classList.add('hidden');
+            }
+
+            function renderShop() {
+                document.getElementById('shop-coin-display').textContent = formatNum(state.coins);
+                const container = document.getElementById('shop-items-container');
+                container.innerHTML = '';
+
+                document.querySelectorAll('.shop-tab').forEach(btn => {
+                    btn.className = btn.dataset.tab === state.activeShopTab
+                        ? 'shop-tab px-3.5 py-2 rounded-xl font-game text-xs sm:text-sm bg-sky-400 text-slate-950 font-bold transition shadow-md'
+                        : 'shop-tab px-3.5 py-2 rounded-xl font-game text-xs sm:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+                });
+
+                if (state.activeShopTab === 'tools') {
+                    [state.toolTier, state.toolTier + 1, state.toolTier + 2, state.toolTier + 3].forEach(tier => {
+                        const tool = getToolData(tier);
+                        const isEquipped = tier === state.toolTier;
+                        const isNext = tier === state.toolTier + 1;
+                        const canAfford = state.coins >= tool.cost;
+
+                        const card = document.createElement('div');
+                        card.className = `p-4 rounded-2xl border ${isEquipped ? 'bg-sky-950/65 border-sky-400' : isNext ? 'bg-slate-800/85 border-amber-400/50' : 'bg-slate-900/80 border-white/10'} flex flex-col justify-between gap-3`;
+                        card.innerHTML = `
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-2xl bg-slate-950 border border-sky-400/40 flex items-center justify-center text-2xl">${tool.icon}</div>
+                                <div>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-sky-500/20 text-sky-300">Tier ${tool.tier} (∞)</span>
+                                        ${tool.diamondCount > 0 ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-200">${tool.diamondCount} Diamonds</span>` : ''}
+                                    </div>
+                                    <h3 class="text-white font-game text-base sm:text-lg mt-0.5">${tool.name}</h3>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center bg-slate-950/65 p-2 rounded-xl text-xs">
+                                <div><div class="text-slate-400 text-[10px]">Yield</div><div class="text-emerald-400 font-bold">${formatNum(tool.multiplier)}x</div></div>
+                                <div><div class="text-slate-400 text-[10px]">Speed</div><div class="text-sky-400 font-bold">${tool.swingSpeed.toFixed(1)}x</div></div>
+                                <div><div class="text-slate-400 text-[10px]">Reach</div><div class="text-amber-400 font-bold">${tool.reach.toFixed(1)}m</div></div>
+                            </div>
+                            <button class="w-full py-2.5 rounded-xl font-game font-bold text-sm transition ${
+                                isEquipped ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default' :
+                                (isNext && canAfford) ? 'bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 shadow-lg' :
+                                'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            }">
+                                ${isEquipped ? '✓ Equipped' : isNext ? `BUY & EQUIP — $${formatNum(tool.cost)}` : `Forge Tier ${tier - 1} First ($${formatNum(tool.cost)})`}
+                            </button>
+                        `;
+                        card.querySelector('button').onclick = () => {
+                            if (!isNext || !canAfford) return;
+                            state.coins -= tool.cost;
+                            state.toolTier = tier;
+                            rebuildPlayerTool3D();
+                            sfx.buy();
+                            saveGameData(true);
+                            updateHUD();
+                            renderShop();
+                            showToast(`💎 Forged ${tool.name}!`);
+                        };
+                        container.appendChild(card);
+                    });
+                } else if (state.activeShopTab === 'boats') {
+                    const base = Math.max(1, state.boatTier);
+                    [base, base + 1, base + 2, base + 3].forEach(tier => {
+                        const boat = getBoatData(tier);
+                        const isEquipped = tier === state.boatTier;
+                        const isNext = tier === state.boatTier + 1;
+                        const canAfford = state.coins >= boat.cost;
+
+                        const card = document.createElement('div');
+                        card.className = `p-4 rounded-2xl border ${isEquipped ? 'bg-cyan-950/65 border-cyan-400' : 'bg-slate-900/80 border-white/10'} flex flex-col justify-between gap-3`;
+                        card.innerHTML = `
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-2xl bg-slate-950 border border-cyan-400/40 flex items-center justify-center text-2xl">${boat.icon}</div>
+                                <div>
+                                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300">Boat Tier ${boat.tier}</span>
+                                    <h3 class="text-white font-game text-base sm:text-lg mt-0.5">${boat.name}</h3>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-center bg-slate-950/65 p-2 rounded-xl text-xs">
+                                <div><div class="text-slate-400 text-[10px]">Ocean Speed</div><div class="text-cyan-300 font-bold">${boat.speedMult}x</div></div>
+                                <div><div class="text-slate-400 text-[10px]">Coin Bonus</div><div class="text-amber-300 font-bold">${boat.coinBonus}x</div></div>
+                            </div>
+                            <button class="w-full py-2.5 rounded-xl font-game font-bold text-sm transition ${
+                                isEquipped ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/40' :
+                                (isNext && canAfford) ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-lg' :
+                                'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            }">
+                                ${isEquipped ? '✓ Equipped (Tap BOAT to Sail)' : isNext ? `BUY & EQUIP — $${formatNum(boat.cost)}` : `Unlock Boat ${tier - 1} First ($${formatNum(boat.cost)})`}
+                            </button>
+                        `;
+                        card.querySelector('button').onclick = () => {
+                            if (!isNext || !canAfford) return;
+                            state.coins -= boat.cost;
+                            state.boatTier = tier;
+                            rebuildPlayerBoat3D();
+                            sfx.boat();
+                            saveGameData(true);
+                            updateHUD();
+                            renderShop();
+                            showToast(`⛵ Built ${boat.name}!`);
+                        };
+                        container.appendChild(card);
+                    });
+                } else if (state.activeShopTab === 'upgrades') {
+                    const upgrades = [
+                        { key: 'islandSizeLevel', name: 'Home Island Expansion', icon: '🏝️', desc: `Expands Home Island (${getHomeRadius()}m radius) & adds richer crystal rings.`, base: 100, scale: 2.05 },
+                        { key: 'harvestPowerLevel', name: 'Harvest Power Mastery', icon: '💎', desc: `Multiplies coins earned from all crystals (+35% per level).`, base: 75, scale: 1.9 },
+                        { key: 'speedLevel', name: 'Explorer Swift Boots', icon: '👟', desc: `Increases running & sailing speed infinitely (Lv.${state.speedLevel}).`, base: 60, scale: 1.85 },
+                        { key: 'magnetRangeLevel', name: 'Crystal Magnet Range', icon: '🧲', desc: `Hits multiple crystals in a wider radius (Lv.${state.magnetRangeLevel}).`, base: 85, scale: 1.9 }
+                    ];
+
+                    upgrades.forEach(u => {
+                        const lvl = state[u.key];
+                        const cost = Math.floor(u.base * Math.pow(u.scale, lvl));
+                        const canAfford = state.coins >= cost;
+                        const card = document.createElement('div');
+                        card.className = 'p-4 rounded-2xl bg-slate-900/80 border border-white/10 flex flex-col justify-between gap-3';
+                        card.innerHTML = `
+                            <div class="flex items-start gap-3">
+                                <div class="w-12 h-12 rounded-2xl bg-slate-950 border border-emerald-400/35 flex items-center justify-center text-2xl">${u.icon}</div>
+                                <div>
+                                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Level ${lvl} (Infinite)</span>
+                                    <h3 class="text-white font-game text-base mt-0.5">${u.name}</h3>
+                                    <p class="text-slate-400 text-xs mt-1">${u.desc}</p>
+                                </div>
+                            </div>
+                            <button class="w-full py-2.5 rounded-xl font-game font-bold text-sm transition ${
+                                canAfford ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            }">
+                                UPGRADE TO LV.${lvl + 1} — $${formatNum(cost)}
+                            </button>
+                        `;
+                        card.querySelector('button').onclick = () => {
+                            if (!canAfford) return;
+                            state.coins -= cost;
+                            state[u.key] += 1;
+                            if (u.key === 'islandSizeLevel') {
+                                buildHomeIsland();
+                                populateHomeNodes();
+                            }
+                            sfx.buy();
+                            saveGameData(true);
+                            updateHUD();
+                            renderShop();
+                            showToast(`⬆️ ${u.name} upgraded to Level ${state[u.key]}!`);
+                        };
+                        container.appendChild(card);
+                    });
+                } else if (state.activeShopTab === 'pets') {
+                    // Orbiting 3D Companion Pets (up to 12)
+                    const petCost = Math.floor(160 * Math.pow(2.1, state.petCount));
+                    const canBuyPet = state.petCount < 12 && state.coins >= petCost;
+                    const petCard = document.createElement('div');
+                    petCard.className = 'p-4 rounded-2xl bg-indigo-950/55 border border-indigo-400/40 flex flex-col justify-between gap-3 sm:col-span-2';
+                    petCard.innerHTML = `
+                        <div class="flex items-start gap-3">
+                            <div class="w-12 h-12 rounded-2xl bg-slate-950 border border-indigo-400/40 flex items-center justify-center text-2xl">🐉</div>
+                            <div>
+                                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300">${state.petCount} / 12 Orbiting 3D Pets</span>
+                                <h3 class="text-white font-game text-base mt-0.5">Summon 3D Crystal Companion Pet</h3>
+                                <p class="text-slate-300 text-xs mt-1">Each orbiting 3D companion grants +35% Coins and automatically harvests nearby crystals every 1.5s!</p>
+                            </div>
+                        </div>
+                        <button class="w-full py-2.5 rounded-xl font-game font-bold text-sm transition ${
+                            state.petCount >= 12 ? 'bg-indigo-500/20 text-indigo-300' :
+                            canBuyPet ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                        }">
+                            ${state.petCount >= 12 ? '✓ Max 12 Pets Orbiting!' : `SUMMON PET #${state.petCount + 1} — $${formatNum(petCost)}`}
+                        </button>
+                    `;
+                    petCard.querySelector('button').onclick = () => {
+                        if (!canBuyPet) return;
+                        state.coins -= petCost;
+                        state.petCount += 1;
+                        syncPets3D();
+                        sfx.buy();
+                        saveGameData(true);
+                        updateHUD();
+                        renderShop();
+                        showToast(`🐉 Summoned Companion Pet #${state.petCount}!`);
+                    };
+                    container.appendChild(petCard);
+
+                    // Unlockable Character Auras
+                    AURAS.filter(a => a.id > 0).forEach(aura => {
+                        const isUnlocked = state.unlockedAuras.includes(aura.id);
+                        const isEquipped = state.equippedAura === aura.id;
+                        const canAfford = state.coins >= aura.cost;
+                        const card = document.createElement('div');
+                        card.className = `p-4 rounded-2xl border ${isEquipped ? 'bg-fuchsia-950/60 border-fuchsia-400' : 'bg-slate-900/80 border-white/10'} flex flex-col justify-between gap-3`;
+                        card.innerHTML = `
+                            <div class="flex items-start gap-3">
+                                <div class="w-11 h-11 rounded-2xl bg-slate-950 border border-fuchsia-400/40 flex items-center justify-center text-xl">✨</div>
+                                <div>
+                                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-300">Character Aura</span>
+                                    <h3 class="text-white font-game text-base mt-0.5">${aura.name}</h3>
+                                    <p class="text-slate-400 text-xs mt-1">${aura.desc}</p>
+                                </div>
+                            </div>
+                            <button class="w-full py-2 rounded-xl font-game font-bold text-xs sm:text-sm transition ${
+                                isEquipped ? 'bg-fuchsia-500/25 text-fuchsia-200 border border-fuchsia-400/40' :
+                                isUnlocked ? 'bg-slate-700 hover:bg-slate-600 text-white' :
+                                canAfford ? 'bg-gradient-to-r from-fuchsia-500 to-purple-500 text-white shadow-lg' :
+                                'bg-slate-800 text-slate-500 cursor-not-allowed'
+                            }">
+                                ${isEquipped ? '✓ Equipped' : isUnlocked ? 'EQUIP AURA' : `BUY & EQUIP — $${formatNum(aura.cost)}`}
+                            </button>
+                        `;
+                        card.querySelector('button').onclick = () => {
+                            if (isEquipped) return;
+                            if (!isUnlocked) {
+                                if (!canAfford) return;
+                                state.coins -= aura.cost;
+                                state.unlockedAuras.push(aura.id);
+                            }
+                            state.equippedAura = aura.id;
+                            refreshAuraAndOutfit();
+                            sfx.buy();
+                            saveGameData(true);
+                            updateHUD();
+                            renderShop();
+                            showToast(`✨ Equipped ${aura.name} Aura!`);
+                        };
+                        container.appendChild(card);
+                    });
+
+                    // Outfit Swatches & Quick Warp Card
+                    const outfitCard = document.createElement('div');
+                    outfitCard.className = 'p-4 rounded-2xl bg-slate-900/85 border border-white/10 sm:col-span-2 flex flex-wrap items-center justify-between gap-3';
+                    outfitCard.innerHTML = `
+                        <div>
+                            <h3 class="text-white font-game text-sm">Explorer Outfit Color</h3>
+                            <div class="flex items-center gap-2 mt-2" id="outfit-swatches"></div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="btn-warp-home" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-game font-bold text-xs">🏠 Warp Home</button>
+                            <button id="btn-warp-border" class="px-3.5 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-game font-bold text-xs">🌐 Warp to World Border</button>
+                        </div>
+                    `;
+                    const swatchBox = outfitCard.querySelector('#outfit-swatches');
+                    DEFAULT_OUTFITS.forEach(hex => {
+                        const b = document.createElement('button');
+                        b.className = `w-7 h-7 rounded-full border-2 ${state.outfitColor === hex ? 'border-white scale-110' : 'border-transparent'}`;
+                        b.style.backgroundColor = '#' + hex.toString(16).padStart(6, '0');
+                        b.onclick = () => {
+                            state.outfitColor = hex;
+                            refreshAuraAndOutfit();
+                            saveGameData(true);
+                            renderShop();
+                        };
+                        swatchBox.appendChild(b);
+                    });
+                    outfitCard.querySelector('#btn-warp-home').onclick = () => {
+                        state.x = 0; state.z = 6; state.isSailing = false;
+                        if (equippedBoatMesh) equippedBoatMesh.visible = false;
+                        updateArchipelago();
+                        closeShop();
+                        showToast("🏠 Returned to Crystal Home Isle!");
+                    };
+                    outfitCard.querySelector('#btn-warp-border').onclick = () => {
+                        if (state.boatTier <= 0) {
+                            state.boatTier = 1;
+                            rebuildPlayerBoat3D();
+                        }
+                        state.x = WORLD_BORDER_LIMIT - 30;
+                        state.z = 0;
+                        state.isSailing = true;
+                        if (equippedBoatMesh) equippedBoatMesh.visible = true;
+                        updateArchipelago();
+                        closeShop();
+                        showToast("🌐 Warped to the Minecraft World Border (1,500m)!");
+                    };
+                    container.appendChild(outfitCard);
+                }
+            }
+
+            // ==========================================
+            // 11. HUD & MINIMAP RADAR UPDATER
+            // ==========================================
+            const radarCanvas = document.getElementById('radar-canvas');
+            const radarCtx = radarCanvas.getContext('2d');
+
+            function updateRadar() {
+                const w = radarCanvas.width;
+                const h = radarCanvas.height;
+                const cx = w / 2;
+                const cy = h / 2;
+                const range = 250;
+
+                radarCtx.clearRect(0, 0, w, h);
+                radarCtx.fillStyle = '#07253a';
+                radarCtx.fillRect(0, 0, w, h);
+
+                // Home Island
+                const hx = (0 - state.x) / range * (w / 2);
+                const hz = (0 - state.z) / range * (h / 2);
+                if (Math.hypot(hx, hz) < w * 0.6) {
+                    radarCtx.fillStyle = '#22c55e';
+                    radarCtx.beginPath();
+                    radarCtx.arc(cx + hx, cy + hz, Math.max(4, getHomeRadius() / range * (w / 2)), 0, Math.PI * 2);
+                    radarCtx.fill();
+                } else {
+                    // Direction indicator toward Home Island
+                    const ang = Math.atan2(hz, hx);
+                    radarCtx.fillStyle = '#22c55e';
+                    radarCtx.beginPath();
+                    radarCtx.arc(cx + Math.cos(ang) * (w * 0.42), cy + Math.sin(ang) * (h * 0.42), 3.5, 0, Math.PI * 2);
+                    radarCtx.fill();
+                }
+
+                // Distant Islands
+                for (const isl of activeIslands.values()) {
+                    const ix = (isl.x - state.x) / range * (w / 2);
+                    const iz = (isl.z - state.z) / range * (h / 2);
+                    if (Math.hypot(ix, iz) < w * 0.6) {
+                        radarCtx.fillStyle = '#' + isl.biome.crystal.toString(16).padStart(6, '0');
+                        radarCtx.beginPath();
+                        radarCtx.arc(cx + ix, cy + iz, 4, 0, Math.PI * 2);
+                        radarCtx.fill();
+                    }
+                }
+
+                // World Border lines
+                radarCtx.strokeStyle = '#22d3ee';
+                radarCtx.lineWidth = 2;
+                const bE = (WORLD_BORDER_LIMIT - state.x) / range * (w / 2);
+                const bW = (-WORLD_BORDER_LIMIT - state.x) / range * (w / 2);
+                const bS = (WORLD_BORDER_LIMIT - state.z) / range * (h / 2);
+                const bN = (-WORLD_BORDER_LIMIT - state.z) / range * (h / 2);
+                if (Math.abs(bE) < w / 2) { radarCtx.beginPath(); radarCtx.moveTo(cx + bE, 0); radarCtx.lineTo(cx + bE, h); radarCtx.stroke(); }
+                if (Math.abs(bW) < w / 2) { radarCtx.beginPath(); radarCtx.moveTo(cx + bW, 0); radarCtx.lineTo(cx + bW, h); radarCtx.stroke(); }
+                if (Math.abs(bS) < h / 2) { radarCtx.beginPath(); radarCtx.moveTo(0, cy + bS); radarCtx.lineTo(w, cy + bS); radarCtx.stroke(); }
+                if (Math.abs(bN) < h / 2) { radarCtx.beginPath(); radarCtx.moveTo(0, cy + bN); radarCtx.lineTo(w, cy + bN); radarCtx.stroke(); }
+
+                // Local Player Center
+                radarCtx.fillStyle = '#ffffff';
+                radarCtx.beginPath();
+                radarCtx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+                radarCtx.fill();
+            }
+
+            function updateHUD() {
+                document.getElementById('coin-display').textContent = formatNum(state.coins);
+
+                const tool = getToolData(state.toolTier);
+                document.getElementById('hud-tool-icon').textContent = tool.icon;
+                document.getElementById('hud-tool-tier').textContent = `Tier ${tool.tier}`;
+                document.getElementById('hud-tool-power').textContent = `${formatNum(tool.multiplier)}x`;
+                document.getElementById('hud-tool-name').textContent = tool.name;
+
+                const boat = getBoatData(state.boatTier);
+                document.getElementById('hud-boat-icon').textContent = boat.icon;
+                document.getElementById('hud-boat-tier').textContent = state.boatTier > 0 ? (state.isSailing ? 'Sailing' : `Tier ${boat.tier}`) : 'Swimmer';
+                document.getElementById('hud-boat-speed').textContent = `${boat.speedMult}x`;
+                document.getElementById('hud-boat-name').textContent = boat.name;
+
+                const bx = Math.round(state.x);
+                const by = Math.max(0, Math.round(state.y + 0.5));
+                const bz = Math.round(state.z);
+                const distBorder = Math.max(0, WORLD_BORDER_LIMIT - Math.max(Math.abs(bx), Math.abs(bz)));
+
+                document.getElementById('coord-display').textContent = `X: ${bx} | Y: ${by} | Z: ${bz}`;
+                document.getElementById('border-dist-display').textContent = distBorder <= 0 ? '⚠️ AT BORDER' : `${distBorder.toLocaleString()}m`;
+
+                const vignette = document.getElementById('border-vignette');
+                if (distBorder < 60) vignette.classList.remove('hidden');
+                else vignette.classList.add('hidden');
+
+                let biomeName = '🌊 Open Infinite Ocean';
+                if (Math.hypot(state.x, state.z) <= getHomeRadius() + 1.5) {
+                    biomeName = '🏠 Crystal Home Isle';
+                } else {
+                    for (const isl of activeIslands.values()) {
+                        if (Math.hypot(state.x - isl.x, state.z - isl.z) <= isl.radius + 1.5) {
+                            biomeName = `${isl.biome.icon} ${isl.biome.name}`;
+                            break;
+                        }
+                    }
+                }
+                document.getElementById('biome-badge').textContent = biomeName;
+            }
+
+            // ==========================================
+            // 12. DESKTOP & MOBILE MULTI-TOUCH CONTROLS
+            // ==========================================
+            const keys = {};
+
+            window.addEventListener('keydown', e => {
+                keys[e.code] = true;
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (state.isGrounded && !state.isShopOpen && !state.isSettingsOpen) {
+                        state.vy = 10.5;
+                        state.isGrounded = false;
+                        sfx.jump();
+                    }
+                } else if (e.code === 'KeyF' || e.code === 'KeyE') {
+                    triggerSwing();
+                } else if (e.code === 'KeyB' || e.code === 'KeyV') {
+                    toggleBoat();
+                } else if (e.code === 'KeyT' || e.code === 'Tab') {
+                    e.preventDefault();
+                    state.isShopOpen ? closeShop() : openShop();
+                } else if (e.code === 'Escape') {
+                    if (state.isShopOpen) closeShop();
+                    if (state.isSettingsOpen) closeSettings();
+                }
+            });
+            window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+            canvas.addEventListener('mousedown', e => {
+                if (e.button === 2 || e.button === 1) {
+                    state.isDraggingCam = true;
+                    state.lastMouseX = e.clientX;
+                    state.lastMouseY = e.clientY;
+                } else if (e.button === 0) {
+                    triggerSwing();
+                }
+            });
+            window.addEventListener('mousemove', e => {
+                if (!state.isDraggingCam) return;
+                const dx = e.clientX - state.lastMouseX;
+                const dy = e.clientY - state.lastMouseY;
+                state.lastMouseX = e.clientX;
+                state.lastMouseY = e.clientY;
+                state.camYaw -= dx * 0.007;
+                state.camPitch = Math.max(0.22, Math.min(1.15, state.camPitch + dy * 0.006));
+            });
+            window.addEventListener('mouseup', () => { state.isDraggingCam = false; });
+            canvas.addEventListener('contextmenu', e => e.preventDefault());
+            canvas.addEventListener('wheel', e => {
+                state.camDist = Math.max(9, Math.min(34, state.camDist + e.deltaY * 0.012));
+            }, { passive: true });
+
+            // Multi-Touch Virtual Analog Thumbstick
+            let joyTouchId = null;
+            let joyVec = { x: 0, z: 0 };
+            const joyZone = document.getElementById('joystick-zone');
+            const joyNub = document.getElementById('joystick-nub');
+
+            joyZone.addEventListener('touchstart', e => {
+                e.preventDefault();
+                if (joyTouchId === null && e.changedTouches.length > 0) {
+                    const t = e.changedTouches[0];
+                    joyTouchId = t.identifier;
+                    updateJoy(t);
+                }
+            }, { passive: false });
+
+            joyZone.addEventListener('touchmove', e => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyTouchId) {
+                        updateJoy(e.changedTouches[i]);
+                        break;
+                    }
+                }
+            }, { passive: false });
+
+            function resetJoystick(e) {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyTouchId) {
+                        joyTouchId = null;
+                        joyVec = { x: 0, z: 0 };
+                        joyNub.style.transform = 'translate(0px, 0px)';
+                        break;
+                    }
+                }
+            }
+            joyZone.addEventListener('touchend', resetJoystick);
+            joyZone.addEventListener('touchcancel', resetJoystick);
+
+            function updateJoy(touch) {
+                const rect = joyZone.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const maxR = rect.width / 2 - 20;
+                let dx = touch.clientX - cx;
+                let dy = touch.clientY - cy;
+                const d = Math.hypot(dx, dy);
+                if (d > maxR) {
+                    dx = (dx / d) * maxR;
+                    dy = (dy / d) * maxR;
+                }
+                joyNub.style.transform = `translate(${dx}px, ${dy}px)`;
+                joyVec.x = dx / maxR;
+                joyVec.z = dy / maxR;
+            }
+
+            // Touch-Drag Camera Orbit directly on 3D Canvas (Multi-Touch Safe)
+            let camTouchId = null;
+            let camLastX = 0;
+            let camLastY = 0;
+
+            canvas.addEventListener('touchstart', e => {
+                if (state.isShopOpen || state.isSettingsOpen) return;
+                if (camTouchId === null && e.changedTouches.length > 0) {
+                    const t = e.changedTouches[0];
+                    camTouchId = t.identifier;
+                    camLastX = t.clientX;
+                    camLastY = t.clientY;
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchmove', e => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.identifier === camTouchId) {
+                        const dx = t.clientX - camLastX;
+                        const dy = t.clientY - camLastY;
+                        camLastX = t.clientX;
+                        camLastY = t.clientY;
+                        state.camYaw -= dx * 0.008;
+                        state.camPitch = Math.max(0.22, Math.min(1.15, state.camPitch + dy * 0.007));
+                        break;
+                    }
+                }
+            }, { passive: true });
+
+            function endCamTouch(e) {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === camTouchId) {
+                        camTouchId = null;
+                        break;
+                    }
+                }
+            }
+            canvas.addEventListener('touchend', endCamTouch);
+            canvas.addEventListener('touchcancel', endCamTouch);
+
+            // Ergonomic Action Button Listeners
+            function bindTapAction(el, fn) {
+                el.addEventListener('touchstart', e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fn();
+                }, { passive: false });
+                el.addEventListener('click', e => {
+                    e.stopPropagation();
+                    fn();
+                });
+            }
+
+            bindTapAction(document.getElementById('btn-touch-swing'), triggerSwing);
+            bindTapAction(document.getElementById('btn-touch-jump'), () => {
+                if (state.isGrounded && !state.isShopOpen && !state.isSettingsOpen) {
+                    state.vy = 10.5;
+                    state.isGrounded = false;
+                    sfx.jump();
+                }
+            });
+            bindTapAction(document.getElementById('btn-touch-boat'), toggleBoat);
+            bindTapAction(document.getElementById('btn-touch-shop'), () => state.isShopOpen ? closeShop() : openShop());
+
+            // Auto-Enable Touch Controls on Touch Devices & Screens < 1024px
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth < 1024);
+            let touchControlsVisible = isTouchDevice;
+
+            function applyTouchVisibility() {
+                const mc = document.getElementById('mobile-controls');
+                const lbl = document.getElementById('touch-toggle-label');
+                if (touchControlsVisible) {
+                    mc.classList.remove('hidden');
+                    lbl.textContent = 'Touch: ON';
+                } else {
+                    mc.classList.add('hidden');
+                    lbl.textContent = 'Touch: OFF';
+                }
+            }
+            applyTouchVisibility();
+
+            document.getElementById('btn-toggle-touch').addEventListener('click', () => {
+                touchControlsVisible = !touchControlsVisible;
+                applyTouchVisibility();
+                showToast(touchControlsVisible ? "📱 Touch Controls: ON" : "🖥️ Touch Controls: OFF");
+            });
+
+            // Header & Modal Button Listeners
+            document.getElementById('btn-toggle-shop').addEventListener('click', () => state.isShopOpen ? closeShop() : openShop());
+            document.getElementById('btn-close-shop').addEventListener('click', closeShop);
+            document.getElementById('btn-board-boat').addEventListener('click', toggleBoat);
+            document.getElementById('btn-open-settings').addEventListener('click', openSettings);
+            document.getElementById('btn-close-settings').addEventListener('click', closeSettings);
+            document.getElementById('btn-toggle-sound').addEventListener('click', e => {
+                sfx.enabled = !sfx.enabled;
+                e.currentTarget.textContent = sfx.enabled ? '🔊' : '🔇';
+            });
+
+            document.getElementById('btn-manual-save').addEventListener('click', () => {
+                saveGameData(true);
+                showToast("💾 Game Progress Saved!");
+            });
+
+            // Two-click confirmation for Reset Save
+            let resetConfirmStep = false;
+            const btnResetSave = document.getElementById('btn-reset-save');
+            btnResetSave.addEventListener('click', () => {
+                if (!resetConfirmStep) {
+                    resetConfirmStep = true;
+                    btnResetSave.textContent = "⚠️ Tap Again to Confirm Wipe";
+                    btnResetSave.classList.add('bg-rose-600', 'text-white');
+                    setTimeout(() => {
+                        resetConfirmStep = false;
+                        btnResetSave.textContent = "🗑️ Reset Save Data";
+                        btnResetSave.classList.remove('bg-rose-600', 'text-white');
+                    }, 3500);
+                } else {
+                    localStorage.removeItem(STORAGE_KEY);
+                    location.reload();
+                }
+            });
+
+            document.querySelectorAll('.shop-tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.activeShopTab = btn.dataset.tab;
+                    renderShop();
+                });
+            });
+
+            // ==========================================
+            // 13. MAIN 60 FPS GAME LOOP
+            // ==========================================
+            let lastTime = performance.now();
+            let sectorTimer = 0;
+            let petHarvestTimer = 0;
+            let autoSaveTimer = 0;
+
+            function animate(now) {
+                requestAnimationFrame(animate);
+                const dt = Math.min(0.05, (now - lastTime) / 1000);
+                lastTime = now;
+                const timeSec = now * 0.001;
+
+                // Scroll Minecraft World Border stripes
+                borderTex.offset.x += dt * 0.35;
+                borderTex.offset.y += dt * 0.14;
+
+                // Movement Input
+                let mx = 0;
+                let mz = 0;
+                if (keys['KeyW'] || keys['ArrowUp']) mz -= 1;
+                if (keys['KeyS'] || keys['ArrowDown']) mz += 1;
+                if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+                if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+                if (joyTouchId !== null) {
+                    mx += joyVec.x;
+                    mz += joyVec.z;
+                }
+
+                // Auto-deploy/stow boat when entering/leaving deep water
+                const onLand = isLandAt(state.x, state.z);
+                if (!onLand && state.boatTier > 0 && !state.isSailing) {
+                    state.isSailing = true;
+                    if (equippedBoatMesh) equippedBoatMesh.visible = true;
+                } else if (onLand && state.isSailing) {
+                    state.isSailing = false;
+                    if (equippedBoatMesh) equippedBoatMesh.visible = false;
+                }
+
+                const boat = getBoatData(state.boatTier);
+                const speedMult = (1 + (state.speedLevel - 1) * 0.14) * (onLand ? 1.0 : boat.speedMult);
+                const moveSpeed = 10.5 * speedMult;
+
+                const len = Math.hypot(mx, mz);
+                if (len > 0.05 && !state.isShopOpen && !state.isSettingsOpen) {
+                    const nx = mx / Math.max(1, len);
+                    const nz = mz / Math.max(1, len);
+                    const sinY = Math.sin(state.camYaw);
+                    const cosY = Math.cos(state.camYaw);
+                    const wdx = nx * cosY + nz * sinY;
+                    const wdz = -nx * sinY + nz * cosY;
+
+                    state.x += wdx * moveSpeed * dt;
+                    state.z += wdz * moveSpeed * dt;
+
+                    // World Border Clamping
+                    state.x = Math.max(-WORLD_BORDER_LIMIT + 1.5, Math.min(WORLD_BORDER_LIMIT - 1.5, state.x));
+                    state.z = Math.max(-WORLD_BORDER_LIMIT + 1.5, Math.min(WORLD_BORDER_LIMIT - 1.5, state.z));
+
+                    const targetRot = Math.atan2(wdx, wdz);
+                    let diff = targetRot - state.rotY;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    state.rotY += diff * Math.min(1, dt * 12);
+                    state.walkCycle += dt * 11;
+                } else {
+                    state.walkCycle = 0;
+                }
+
+                // Gravity & Jump Physics
+                const groundY = onLand ? 0.5 : (state.isSailing ? -0.15 : -0.82);
+                if (!state.isGrounded || state.y > groundY) {
+                    state.vy -= 26 * dt;
+                    state.y += state.vy * dt;
+                    if (state.y <= groundY) {
+                        state.y = groundY;
+                        state.vy = 0;
+                        state.isGrounded = true;
+                    }
+                } else {
+                    state.y = groundY + (!onLand ? Math.sin(timeSec * 3.8) * 0.1 : 0);
+                }
+
+                playerRoot.position.set(state.x, state.y, state.z);
+                playerRoot.rotation.y = state.rotY;
+
+                // Limb & Tool Swing Animation
+                const { leftLeg, rightLeg, leftArm, rightArmPivot } = playerChar.userData;
+                if (state.walkCycle > 0 && onLand) {
+                    leftLeg.rotation.x = Math.sin(state.walkCycle) * 0.65;
+                    rightLeg.rotation.x = -Math.sin(state.walkCycle) * 0.65;
+                    leftArm.rotation.x = -Math.sin(state.walkCycle) * 0.55;
+                } else {
+                    leftLeg.rotation.x = 0;
+                    rightLeg.rotation.x = 0;
+                    leftArm.rotation.x = 0;
+                }
+
+                const tool = getToolData(state.toolTier);
+                if (state.isSwinging) {
+                    state.swingProgress += dt * 4.8 * tool.swingSpeed;
+                    rightArmPivot.rotation.x = -Math.sin(state.swingProgress * Math.PI) * 2.1;
+                    if (state.swingProgress >= 0.45 && !state.hitThisSwing) {
+                        state.hitThisSwing = true;
+                        evaluateSwingHit();
+                    }
+                    if (state.swingProgress >= 1) {
+                        state.isSwinging = false;
+                        rightArmPivot.rotation.x = 0;
+                    }
+                } else {
+                    rightArmPivot.rotation.x = 0;
+                }
+
+                // Animate Tool Diamonds, Aura & Orbiting 3D Companion Pets
+                orbitingToolGems.forEach((g, idx) => {
+                    const a = g.baseAng + timeSec * 3.2;
+                    g.mesh.position.set(Math.cos(a) * 0.48, 1.3 + Math.sin(timeSec * 4 + idx) * 0.12, Math.sin(a) * 0.48);
+                });
+                auraMesh.rotation.z += dt * 1.5;
+
+                petMeshes.forEach(p => {
+                    const ang = timeSec * 2.0 + p.idx * ((Math.PI * 2) / Math.max(1, petMeshes.length));
+                    const tx = state.x + Math.cos(ang) * 2.1;
+                    const tz = state.z + Math.sin(ang) * 2.1;
+                    p.group.position.lerp(new THREE.Vector3(tx, state.y + 1.8 + Math.sin(timeSec * 4 + p.idx) * 0.25, tz), dt * 6);
+                    p.group.rotation.y += dt * 2.5;
+                });
+
+                // Orbiting Pets Periodic Auto-Harvest
+                if (state.petCount > 0) {
+                    petHarvestTimer += dt;
+                    if (petHarvestTimer >= 1.5) {
+                        petHarvestTimer = 0;
+                        for (const node of resourceNodes) {
+                            if (node.respawnTimer <= 0 && Math.hypot(node.x - state.x, node.z - state.z) <= 8.0) {
+                                const petGain = Math.max(1, Math.round(node.value * getTotalMultiplier() * (0.18 * state.petCount)));
+                                state.coins += petGain;
+                                state.totalCoinsEarned += petGain;
+                                spawnBurst(node.x, 1.3, node.z, node.color, 3);
+                                spawnFloatingPopup(new THREE.Vector3(node.x, 1.4, node.z), `🐉 +$${formatNum(petGain)}`, 'text-indigo-300');
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Crystal Nodes Respawn & Proximity Prompt
+                let nearCrystal = false;
+                for (const node of resourceNodes) {
+                    if (node.respawnTimer > 0) {
+                        node.respawnTimer -= dt;
+                        if (node.respawnTimer <= 0) {
+                            node.hp = node.maxHp;
+                            node.mesh.visible = true;
+                            node.mesh.scale.set(0.1, 0.1, 0.1);
+                        }
+                    } else {
+                        if (node.mesh.scale.x < 1) {
+                            const s = Math.min(1, node.mesh.scale.x + dt * 3.5);
+                            node.mesh.scale.set(s, s, s);
+                        }
+                        if (node.shakeTimer > 0) {
+                            node.shakeTimer -= dt;
+                            node.mesh.rotation.z = Math.sin(now * 0.06) * 0.15;
+                        } else {
+                            node.mesh.rotation.z = 0;
+                        }
+                        if (Math.hypot(node.x - state.x, node.z - state.z) <= tool.reach + 0.8) {
+                            nearCrystal = true;
+                        }
+                    }
+                }
+
+                const ctxPrompt = document.getElementById('context-prompt');
+                if (nearCrystal) {
+                    ctxPrompt.classList.remove('hidden');
+                    document.getElementById('context-icon').textContent = '💎';
+                    document.getElementById('context-text').textContent = 'Tap SWING or Click to Mine Crystal!';
+                } else if (Math.hypot(state.x + 5.5, state.z + 5.5) < 4.5) {
+                    ctxPrompt.classList.remove('hidden');
+                    document.getElementById('context-icon').textContent = '🏪';
+                    document.getElementById('context-text').textContent = 'Tap SHOP or press T to open Forge!';
+                } else {
+                    ctxPrompt.classList.add('hidden');
+                }
+
+                // Particles
+                for (let i = activeParticles.length - 1; i >= 0; i--) {
+                    const p = activeParticles[i];
+                    p.life -= dt;
+                    p.vy -= 14 * dt;
+                    p.mesh.position.x += p.vx * dt;
+                    p.mesh.position.y += p.vy * dt;
+                    p.mesh.position.z += p.vz * dt;
+                    p.mesh.scale.setScalar(Math.max(0.01, p.life));
+                    if (p.life <= 0) {
+                        scene.remove(p.mesh);
+                        activeParticles.splice(i, 1);
+                    }
+                }
+
+                // Meteor Shower Event Timer (every 90s for 20s)
+                if (state.comboTimer > 0) {
+                    state.comboTimer -= dt;
+                    if (state.comboTimer <= 0) state.combo = 0;
+                }
+                if (state.meteorActive) {
+                    state.meteorTimer -= dt;
+                    document.getElementById('event-text').textContent = `Meteor Shower! 2x (${Math.ceil(state.meteorTimer)}s)`;
+                    if (state.meteorTimer <= 0) {
+                        state.meteorActive = false;
+                        document.getElementById('event-banner').classList.add('hidden');
+                    }
+                } else {
+                    state.nextMeteorIn -= dt;
+                    if (state.nextMeteorIn <= 0) {
+                        state.nextMeteorIn = 90;
+                        state.meteorActive = true;
+                        state.meteorTimer = 20;
+                        document.getElementById('event-banner').classList.remove('hidden');
+                        showToast("☄️ Meteor Shower! 2x Coins & Starfall Crystals spawned!");
+                        for (let m = 0; m < 5; m++) {
+                            const a = (m / 5) * Math.PI * 2;
+                            createCrystalNode(state.x + Math.cos(a) * 11, state.z + Math.sin(a) * 11, 0xf43f5e, 4.5 * state.toolTier, 'meteor');
+                        }
+                    }
+                }
+
+                // Periodic Archipelago Chunk Loading & Auto-Save (every 5s)
+                sectorTimer += dt;
+                if (sectorTimer >= 0.5) {
+                    sectorTimer = 0;
+                    updateArchipelago();
+                }
+                autoSaveTimer += dt;
+                if (autoSaveTimer >= 5.0) {
+                    autoSaveTimer = 0;
+                    saveGameData(true);
+                }
+
+                // Ocean & Sunlight Follow Player
+                oceanMesh.position.x = state.x;
+                oceanMesh.position.z = state.z;
+                dirLight.position.set(state.x + 45, 75, state.z + 45);
+                dirLight.target.position.copy(playerRoot.position);
+
+                // Smooth Third-Person Orbit Camera
+                const cx = Math.sin(state.camYaw) * Math.cos(state.camPitch) * state.camDist;
+                const cy = Math.sin(state.camPitch) * state.camDist;
+                const cz = Math.cos(state.camYaw) * Math.cos(state.camPitch) * state.camDist;
+                camera.position.lerp(new THREE.Vector3(state.x + cx, state.y + cy + 1.5, state.z + cz), Math.min(1, dt * 10));
+                camera.lookAt(state.x, state.y + 1.4, state.z);
+
+                updateHUD();
+                updateRadar();
+                renderer.render(scene, camera);
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Initialize World & Start Game Loop
+            buildHomeIsland();
+            populateHomeNodes();
+            rebuildPlayerTool3D();
+            rebuildPlayerBoat3D();
+            syncPets3D();
+            refreshAuraAndOutfit();
+            updateArchipelago();
+            updateHUD();
+            animate(performance.now());
+        });
+    </script>
+</body>
+</html>
